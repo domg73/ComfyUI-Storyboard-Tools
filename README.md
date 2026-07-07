@@ -1,6 +1,6 @@
 # ComfyUI-Storyboard-Tools
 
-A suite of native custom nodes for ComfyUI engineered for high-precision generation, structural isolation, frame extraction, and cinematic contrast tuning of multi-frame storyboard layouts. Specifically designed to overcome spatial attention artifacts and frame-bleeding in advanced Diffusion Transformer (DiT) architectures like Krea2.
+A suite of native custom nodes for ComfyUI engineered for high-precision generation, structural isolation, frame extraction, and cinematic contrast tuning of multi-frame storyboard layouts. Specifically designed to overcome spatial attention artifacts and frame-bleeding in advanced Diffusion Transformer (DiT) models like Krea2.
 
 ## 📄 License & Copyright
 
