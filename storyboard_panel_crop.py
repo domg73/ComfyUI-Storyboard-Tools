@@ -19,6 +19,7 @@ class StoryboardPanelCrop:
                     "original_proportions", 
                     "1:1 (Square)", 
                     "16:9 (Widescreen)", 
+                    "3:4 (Vertical)", 
                     "9:16 (Vertical)", 
                     "21:9 (Ultrawide)"
                 ], {"default": "16:9 (Widescreen)"}),
@@ -57,32 +58,78 @@ class StoryboardPanelCrop:
                 if c == columns - 1: end_x = width
                 if r == rows - 1: end_y = height
 
+                # Clamp coordinates for drawing safety to prevent negative/out-of-bound indices
+                draw_start_x = max(0, min(width, start_x))
+                draw_end_x = max(0, min(width, end_x))
+                draw_start_y = max(0, min(height, start_y))
+                draw_end_y = max(0, min(height, end_y))
+
                 # Main vertical splitting lines allocation (Red)
-                if 0 <= start_x < width:
-                    preview[:, :, max(0, start_x-1):min(width, start_x+2), 0] = 1.0
-                    preview[:, :, max(0, start_x-1):min(width, start_x+2), 1:] = 0.0
+                if 0 <= draw_start_x < width:
+                    preview[:, :, max(0, draw_start_x-1):min(width, draw_start_x+2), 0] = 1.0
+                    preview[:, :, max(0, draw_start_x-1):min(width, draw_start_x+2), 1:] = 0.0
                 # Main horizontal splitting lines allocation (Red)
-                if 0 <= start_y < height:
-                    preview[:, max(0, start_y-1):min(height, start_y+2), :, 0] = 1.0
-                    preview[:, max(0, start_y-1):min(height, start_y+2), :, 1:] = 0.0
+                if 0 <= draw_start_y < height:
+                    preview[:, max(0, draw_start_y-1):min(height, draw_start_y+2), :, 0] = 1.0
+                    preview[:, max(0, draw_start_y-1):min(height, draw_start_y+2), :, 1:] = 0.0
 
                 # Slices inner safety boundaries shave preview mapping (Cyan)
                 if shave_edges_pixels > 0:
-                    if (end_x - start_x) > (shave_edges_pixels * 2) and (end_y - start_y) > (shave_edges_pixels * 2):
-                        l, r_edge = start_x + shave_edges_pixels, end_x - shave_edges_pixels
-                        t, b = start_y + shave_edges_pixels, end_y - shave_edges_pixels
+                    if (draw_end_x - draw_start_x) > (shave_edges_pixels * 2) and (draw_end_y - draw_start_y) > (shave_edges_pixels * 2):
+                        l, r_edge = draw_start_x + shave_edges_pixels, draw_end_x - shave_edges_pixels
+                        t, b = draw_start_y + shave_edges_pixels, draw_end_y - shave_edges_pixels
                         
                         if 0 <= l < width:
-                            preview[:, start_y:end_y, l, 2] = 1.0; preview[:, start_y:end_y, l, 0:2] = 0.0
+                            preview[:, draw_start_y:draw_end_y, l, 2] = 1.0; preview[:, draw_start_y:draw_end_y, l, 0:2] = 0.0
                         if 0 <= r_edge < width:
-                            preview[:, start_y:end_y, r_edge, 2] = 1.0; preview[:, start_y:end_y, r_edge, 0:2] = 0.0
+                            preview[:, draw_start_y:draw_end_y, r_edge, 2] = 1.0; preview[:, draw_start_y:draw_end_y, r_edge, 0:2] = 0.0
                         if 0 <= t < height:
-                            preview[:, t, start_x:end_x, 2] = 1.0; preview[:, t, start_x:end_x, 0:2] = 0.0
+                            preview[:, t, draw_start_x:draw_end_x, 2] = 1.0; preview[:, t, draw_start_x:draw_end_x, 0:2] = 0.0
                         if 0 <= b < height:
-                            preview[:, b, start_x:end_x, 2] = 1.0; preview[:, b, start_x:end_x, 0:2] = 0.0
+                            preview[:, b, draw_start_x:draw_end_x, 2] = 1.0; preview[:, b, draw_start_x:draw_end_x, 0:2] = 0.0
 
         # Production matrix crop and image tensor extraction
-        ratios = {"1:1 (Square)": 1.0, "16:9 (Widescreen)": 16.0/9.0, "9:16 (Vertical)": 9.0/16.0, "21:9 (Ultrawide)": 21.0/9.0}
+        ratios = {
+            "1:1 (Square)": 1.0, 
+            "16:9 (Widescreen)": 16.0 / 9.0, 
+            "3:4 (Vertical)": 3.0 / 4.0,
+            "9:16 (Vertical)": 9.0 / 16.0, 
+            "21:9 (Ultrawide)": 21.0 / 9.0
+        }
+        
+        # Calculate nominal panel size for uniform output resolution
+        nominal_w = int(round(width / columns))
+        nominal_h = int(round(height / rows))
+        
+        # Subtract shaved edges to find baseline width/height
+        if shave_edges_pixels > 0 and nominal_w > (shave_edges_pixels * 2) and nominal_h > (shave_edges_pixels * 2):
+            base_w = nominal_w - (shave_edges_pixels * 2)
+            base_h = nominal_h - (shave_edges_pixels * 2)
+        else:
+            base_w = nominal_w
+            base_h = nominal_h
+            
+        base_w = max(1, base_w)
+        base_h = max(1, base_h)
+        
+        # Define target dimensions for the batch based on ratio
+        if target_aspect_ratio == "original_proportions":
+            target_w = base_w
+            target_h = base_h
+        else:
+            ratio = ratios[target_aspect_ratio]
+            if ratio < 1.0:
+                # Vertical format: height is the baseline to avoid upscaling
+                target_h = base_h
+                target_w = int(round(base_h * ratio))
+            else:
+                # Landscape/Square format: width is the baseline
+                target_w = base_w
+                target_h = int(round(base_w / ratio))
+                
+        target_w = max(1, target_w)
+        target_h = max(1, target_h)
+        
         final_slices = []
 
         for b in range(batch_size):
@@ -103,10 +150,6 @@ class StoryboardPanelCrop:
                     if c == columns - 1: end_x = width
                     if r == rows - 1: end_y = height
                     
-                    # Calculate original cell dimensions before shaving to set correct target size
-                    orig_panel_w = end_x - start_x
-                    orig_panel_h = end_y - start_y
-                    
                     # Core 2D matrix bounding box slice extraction
                     cropped = single_img[start_y:end_y, start_x:end_x, :]
                     
@@ -118,36 +161,60 @@ class StoryboardPanelCrop:
                     if curr_h <= 0 or curr_w <= 0: continue
 
                     if target_aspect_ratio == "original_proportions":
-                        t_w = orig_panel_w
-                        t_h = orig_panel_h
-                        final_img = cropped
+                        ts_p = cropped.permute(2, 0, 1).unsqueeze(0)
+                        res = torch.nn.functional.interpolate(ts_p, size=(target_h, target_w), mode='bicubic', align_corners=True)
                     else:
                         ratio = ratios[target_aspect_ratio]
-                        t_w, t_h = orig_panel_w, int(round(orig_panel_w / ratio))
                         if padding_mode == "center_crop_zoom":
                             if (curr_w / curr_h) > ratio:
                                 nw = int(round(ratio * curr_h))
-                                final_img = cropped[:, ((curr_w - nw) // 2):((curr_w - nw) // 2) + nw, :]
+                                nw = max(1, min(curr_w, nw))
+                                crop_start = (curr_w - nw) // 2
+                                final_img = cropped[:, crop_start : crop_start + nw, :]
                             else:
                                 nh = int(round(curr_w / ratio))
-                                final_img = cropped[((curr_h - nh) // 2):((curr_h - nh) // 2) + nh, :, :]
+                                nh = max(1, min(curr_h, nh))
+                                crop_start = (curr_h - nh) // 2
+                                final_img = cropped[crop_start : crop_start + nh, :, :]
+                                
+                            ts_p = final_img.permute(2, 0, 1).unsqueeze(0)
+                            res = torch.nn.functional.interpolate(ts_p, size=(target_h, target_w), mode='bicubic', align_corners=True)
+                            
+                            # High-definition convolution sharpening sequence (Lanczos Emulation)
+                            if target_w > curr_w:
+                                res = torch.nn.functional.pad(res, (1, 1, 1, 1), mode='replicate')
+                                kernel = torch.tensor([[0.0, -0.1, 0.0], [-0.1, 1.4, -0.1], [0.0, -0.1, 0.0]], device=ts_p.device, dtype=ts_p.dtype)
+                                res = torch.nn.functional.conv2d(res, kernel.view(1, 1, 3, 3).repeat(c_ch, 1, 1, 1), groups=c_ch)
                         else:
                             # Native letterbox padding matrix adaptation sequence
                             ts_p = cropped.permute(2, 0, 1).unsqueeze(0)
-                            th_pad = int(round(t_w * (curr_h / curr_w)))
-                            res_base = torch.nn.functional.interpolate(ts_p, size=(th_pad, t_w), mode='bicubic', align_corners=True)
-                            t_pad = t_h - th_pad
-                            if t_pad > 0:
-                                res_base = torch.nn.functional.pad(res_base, (0, 0, t_pad // 2, t_pad - (t_pad // 2)), mode='constant', value=0.0)
-                            final_slices.append(res_base.squeeze(0).permute(1, 2, 0).unsqueeze(0))
-                            continue
+                            if (curr_w / curr_h) > ratio:
+                                # Image is wider than target aspect ratio -> fit width, pad height
+                                tw_pad = target_w
+                                th_pad = int(round(target_w * (curr_h / curr_w)))
+                                th_pad = max(1, min(target_h, th_pad))
+                                res_base = torch.nn.functional.interpolate(ts_p, size=(th_pad, tw_pad), mode='bicubic', align_corners=True)
+                                t_pad = target_h - th_pad
+                                if t_pad > 0:
+                                    res = torch.nn.functional.pad(res_base, (0, 0, t_pad // 2, t_pad - (t_pad // 2)), mode='constant', value=0.0)
+                                else:
+                                    res = res_base
+                            else:
+                                # Image is taller than target aspect ratio -> fit height, pad width
+                                th_pad = target_h
+                                tw_pad = int(round(target_h * (curr_w / curr_h)))
+                                tw_pad = max(1, min(target_w, tw_pad))
+                                res_base = torch.nn.functional.interpolate(ts_p, size=(th_pad, tw_pad), mode='bicubic', align_corners=True)
+                                t_pad = target_w - tw_pad
+                                if t_pad > 0:
+                                    res = torch.nn.functional.pad(res_base, (t_pad // 2, t_pad - (t_pad // 2), 0, 0), mode='constant', value=0.0)
+                                else:
+                                    res = res_base
+                                    
+                            # Ensure shape is exactly (target_h, target_w)
+                            if res.shape[2] != target_h or res.shape[3] != target_w:
+                                res = torch.nn.functional.interpolate(res, size=(target_h, target_w), mode='bicubic', align_corners=True)
 
-                    # High-definition convolution sharpening sequence (Lanczos Emulation)
-                    ts_p = final_img.permute(2, 0, 1).unsqueeze(0)
-                    res = torch.nn.functional.interpolate(ts_p, size=(t_h, t_w), mode='bicubic', align_corners=True)
-                    if t_w > curr_w:
-                        res = torch.nn.functional.pad(res, (1, 1, 1, 1), mode='replicate')
-                        res = torch.nn.functional.conv2d(res, torch.tensor([[0.0, -0.1, 0.0], [-0.1, 1.4, -0.1], [0.0, -0.1, 0.0]], device=ts_p.device, dtype=ts_p.dtype).view(1, 1, 3, 3).repeat(c_ch, 1, 1, 1), groups=c_ch)
                     final_slices.append(torch.clamp(res, 0.0, 1.0).squeeze(0).permute(1, 2, 0).unsqueeze(0))
 
         output_tensor = torch.cat(final_slices, dim=0) if final_slices else image
