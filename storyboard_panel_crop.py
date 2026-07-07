@@ -38,11 +38,17 @@ class StoryboardPanelCrop:
         # Parallel matrix grid preview generation
         preview = image.clone()
         if shave_edges_pixels > 0:
-            # Global outer boundaries shave preview (Yellow allocation)
-            preview[:, :shave_edges_pixels, :, 0:2] = 1.0; preview[:, :shave_edges_pixels, :, 2] = 0.0
-            preview[:, -shave_edges_pixels:, :, 0:2] = 1.0; preview[:, -shave_edges_pixels:, :, 2] = 0.0
-            preview[:, :, :shave_edges_pixels, 0:2] = 1.0; preview[:, :, :shave_edges_pixels, 2] = 0.0
-            preview[:, :, -shave_edges_pixels:, 0:2] = 1.0; preview[:, :, -shave_edges_pixels:, 2] = 0.0
+            # Global outer boundaries shave preview (Yellow or White)
+            if channels >= 3:
+                preview[:, :shave_edges_pixels, :, 0:2] = 1.0; preview[:, :shave_edges_pixels, :, 2] = 0.0
+                preview[:, -shave_edges_pixels:, :, 0:2] = 1.0; preview[:, -shave_edges_pixels:, :, 2] = 0.0
+                preview[:, :, :shave_edges_pixels, 0:2] = 1.0; preview[:, :, :shave_edges_pixels, 2] = 0.0
+                preview[:, :, -shave_edges_pixels:, 0:2] = 1.0; preview[:, :, -shave_edges_pixels:, 2] = 0.0
+            else:
+                preview[:, :shave_edges_pixels, :, 0] = 1.0
+                preview[:, -shave_edges_pixels:, :, 0] = 1.0
+                preview[:, :, :shave_edges_pixels, 0] = 1.0
+                preview[:, :, -shave_edges_pixels:, 0] = 1.0
 
         segment_w = width / columns
         segment_h = height / rows
@@ -64,29 +70,45 @@ class StoryboardPanelCrop:
                 draw_start_y = max(0, min(height, start_y))
                 draw_end_y = max(0, min(height, end_y))
 
-                # Main vertical splitting lines allocation (Red)
+                # Main vertical splitting lines allocation (Red or White)
                 if 0 <= draw_start_x < width:
-                    preview[:, :, max(0, draw_start_x-1):min(width, draw_start_x+2), 0] = 1.0
-                    preview[:, :, max(0, draw_start_x-1):min(width, draw_start_x+2), 1:] = 0.0
-                # Main horizontal splitting lines allocation (Red)
+                    if channels >= 3:
+                        preview[:, :, max(0, draw_start_x-1):min(width, draw_start_x+2), 0] = 1.0
+                        preview[:, :, max(0, draw_start_x-1):min(width, draw_start_x+2), 1:3] = 0.0
+                    else:
+                        preview[:, :, max(0, draw_start_x-1):min(width, draw_start_x+2), 0] = 1.0
+                # Main horizontal splitting lines allocation (Red or White)
                 if 0 <= draw_start_y < height:
-                    preview[:, max(0, draw_start_y-1):min(height, draw_start_y+2), :, 0] = 1.0
-                    preview[:, max(0, draw_start_y-1):min(height, draw_start_y+2), :, 1:] = 0.0
+                    if channels >= 3:
+                        preview[:, max(0, draw_start_y-1):min(height, draw_start_y+2), :, 0] = 1.0
+                        preview[:, max(0, draw_start_y-1):min(height, draw_start_y+2), :, 1:3] = 0.0
+                    else:
+                        preview[:, max(0, draw_start_y-1):min(height, draw_start_y+2), :, 0] = 1.0
 
-                # Slices inner safety boundaries shave preview mapping (Cyan)
+                # Slices inner safety boundaries shave preview mapping (Blue or Gray)
                 if shave_edges_pixels > 0:
                     if (draw_end_x - draw_start_x) > (shave_edges_pixels * 2) and (draw_end_y - draw_start_y) > (shave_edges_pixels * 2):
                         l, r_edge = draw_start_x + shave_edges_pixels, draw_end_x - shave_edges_pixels
                         t, b = draw_start_y + shave_edges_pixels, draw_end_y - shave_edges_pixels
                         
-                        if 0 <= l < width:
-                            preview[:, draw_start_y:draw_end_y, l, 2] = 1.0; preview[:, draw_start_y:draw_end_y, l, 0:2] = 0.0
-                        if 0 <= r_edge < width:
-                            preview[:, draw_start_y:draw_end_y, r_edge, 2] = 1.0; preview[:, draw_start_y:draw_end_y, r_edge, 0:2] = 0.0
-                        if 0 <= t < height:
-                            preview[:, t, draw_start_x:draw_end_x, 2] = 1.0; preview[:, t, draw_start_x:draw_end_x, 0:2] = 0.0
-                        if 0 <= b < height:
-                            preview[:, b, draw_start_x:draw_end_x, 2] = 1.0; preview[:, b, draw_start_x:draw_end_x, 0:2] = 0.0
+                        if channels >= 3:
+                            if 0 <= l < width:
+                                preview[:, draw_start_y:draw_end_y, l, 2] = 1.0; preview[:, draw_start_y:draw_end_y, l, 0:2] = 0.0
+                            if 0 <= r_edge < width:
+                                preview[:, draw_start_y:draw_end_y, r_edge, 2] = 1.0; preview[:, draw_start_y:draw_end_y, r_edge, 0:2] = 0.0
+                            if 0 <= t < height:
+                                preview[:, t, draw_start_x:draw_end_x, 2] = 1.0; preview[:, t, draw_start_x:draw_end_x, 0:2] = 0.0
+                            if 0 <= b < height:
+                                preview[:, b, draw_start_x:draw_end_x, 2] = 1.0; preview[:, b, draw_start_x:draw_end_x, 0:2] = 0.0
+                        else:
+                            if 0 <= l < width:
+                                preview[:, draw_start_y:draw_end_y, l, 0] = 0.5
+                            if 0 <= r_edge < width:
+                                preview[:, draw_start_y:draw_end_y, r_edge, 0] = 0.5
+                            if 0 <= t < height:
+                                preview[:, t, draw_start_x:draw_end_x, 0] = 0.5
+                            if 0 <= b < height:
+                                preview[:, b, draw_start_x:draw_end_x, 0] = 0.5
 
         # Production matrix crop and image tensor extraction
         ratios = {
