@@ -10,11 +10,14 @@ class StoryboardGridGenerator:
             "required": {
                 "width": ("INT", {"default": 2048, "min": 64, "max": 8192, "step": 16}),
                 "height": ("INT", {"default": 1152, "min": 64, "max": 8192, "step": 16}),
-                "num_panels": ("INT", {"default": 4, "min": 1, "max": 12, "step": 1}),
+                "num_panels": ("INT", {"default": 4, "min": 1, "max": 30, "step": 1}),
                 "border_thickness": ("INT", {"default": 4, "min": 0, "max": 64, "step": 2}),
                 "background_gray_value": ("INT", {"default": 25, "min": 0, "max": 255, "step": 1, "display": "slider"}),
                 "invert_colors": ("BOOLEAN", {"default": False}),
                 "transparent_cells": ("BOOLEAN", {"default": False}),
+                "layout_mode": (["auto", "vertical_list", "horizontal_row", "custom"], {"default": "auto"}),
+                "custom_columns": ("INT", {"default": 2, "min": 1, "max": 20, "step": 1}),
+                "custom_rows": ("INT", {"default": 2, "min": 1, "max": 20, "step": 1}),
             }
         }
 
@@ -23,14 +26,26 @@ class StoryboardGridGenerator:
     FUNCTION = "generate_storyboard_grid"
     CATEGORY = "utils/storyboard"
 
-    def generate_storyboard_grid(self, width, height, num_panels, border_thickness, background_gray_value, invert_colors, transparent_cells):
-        if num_panels <= 1: cols, rows = 1, 1
-        elif num_panels == 2: cols, rows = 2, 1
-        elif num_panels <= 4: cols, rows = 2, 2
-        elif num_panels <= 6: cols, rows = 3, 2
-        elif num_panels <= 8: cols, rows = 4, 2
-        elif num_panels <= 9: cols, rows = 3, 3
-        else: cols, rows = 4, 3
+    def generate_storyboard_grid(self, width, height, num_panels, border_thickness, background_gray_value, invert_colors, transparent_cells, layout_mode="auto", custom_columns=2, custom_rows=2):
+        if layout_mode == "vertical_list":
+            cols, rows = 1, num_panels
+        elif layout_mode == "horizontal_row":
+            cols, rows = num_panels, 1
+        elif layout_mode == "custom":
+            cols, rows = custom_columns, custom_rows
+        else:
+            # Auto layout mapping
+            if num_panels <= 1: cols, rows = 1, 1
+            elif num_panels == 2: cols, rows = 2, 1
+            elif num_panels <= 4: cols, rows = 2, 2
+            elif num_panels <= 6: cols, rows = 3, 2
+            elif num_panels <= 8: cols, rows = 4, 2
+            elif num_panels <= 9: cols, rows = 3, 3
+            else: cols, rows = 4, 3
+            # Clamp cols/rows by panels
+            if num_panels < cols * rows:
+                # If there are fewer panels than the layout dimensions allow, restrict dimensions if necessary
+                pass
 
         # Base layout initialization: 1.0 represents the default white grid borders
         grid_map = torch.ones((height, width), dtype=torch.float32)
