@@ -237,6 +237,9 @@ class StoryboardPanelCrop:
                             if res.shape[2] != target_h or res.shape[3] != target_w:
                                 res = torch.nn.functional.interpolate(res, size=(target_h, target_w), mode='bicubic', align_corners=True)
 
+                    # Global finishing step: upscale the processed layout back to the original native panel grid size
+                    res = torch.nn.functional.interpolate(res, size=(nominal_h, nominal_w), mode='bicubic', align_corners=True)
+
                     final_slices.append(torch.clamp(res, 0.0, 1.0).squeeze(0).permute(1, 2, 0).unsqueeze(0))
 
         output_tensor = torch.cat(final_slices, dim=0) if final_slices else image
